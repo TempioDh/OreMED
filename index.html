@@ -1,0 +1,447 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,viewport-fit=cover">
+<title>Ore MED</title>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Semi+Condensed:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: var(--tg-theme-bg-color, #fbfbf8);
+    --bg2: var(--tg-theme-secondary-bg-color, #eeeee8);
+    --tx: var(--tg-theme-text-color, #1d2119);
+    --hint: var(--tg-theme-hint-color, #8b8f86);
+    --accent: var(--tg-theme-button-color, #3552c9);
+    --accent-tx: var(--tg-theme-button-text-color, #fff);
+    --line: var(--bg2);
+    --med: #3552c9;   /* ore MED: blu inchiostro */
+    --ok: #3f7d3a;    /* convalidate: verde */
+    --no: #c9483b;    /* rifiutate: rosso mattone */
+    --num: 'Barlow Semi Condensed', 'Barlow', system-ui, sans-serif;
+  }
+  html.dark { --med: #7d93ff; --ok: #7cc070; --no: #ef7a6c; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--bg); color: var(--tx); font: 15px/1.3 'Barlow', system-ui, sans-serif; overflow: hidden; overscroll-behavior: none; }
+  button, select { font: inherit; color: inherit; background: none; border: 0; padding: 0; }
+  button { cursor: pointer; }
+  [hidden] { display: none !important; }
+  .ok { color: var(--ok); } .no { color: var(--no); } .wait { color: var(--hint); }
+
+  .app { height: var(--tg-viewport-stable-height, 100dvh); display: flex; flex-direction: column; }
+  .pane { flex: 1; min-height: 0; overflow-y: auto; }
+
+  /* Riepilogo personale in alto */
+  .top { background: var(--bg2); padding: calc(10px + env(safe-area-inset-top)) 16px 12px; }
+  .who { position: relative; display: inline-flex; max-width: 100%; font-weight: 600; font-size: 17px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  /* elenco a discesa delle persone: solo per gli amministratori */
+  .who select { appearance: none; -webkit-appearance: none; font-weight: 600; padding-right: 18px; max-width: 100%; text-overflow: ellipsis; }
+  .who:has(select)::after { content: ""; position: absolute; right: 2px; top: 50%; width: 7px; height: 7px; border: solid var(--hint); border-width: 0 2px 2px 0; transform: translateY(-75%) rotate(45deg); pointer-events: none; }
+  .sum { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: 8px; }
+  .sum span { display: block; font-size: 13px; color: var(--hint); }
+  .sum b { font: 600 24px/1.1 var(--num); font-variant-numeric: tabular-nums; }
+  .sum small { font: 500 14px var(--num); color: var(--hint); }
+
+  /* Giorni: 7 righe che riempiono lo schermo */
+  #days { display: flex; flex-direction: column; min-height: 100%; }
+  .day { flex: 1; min-height: 60px; position: relative; display: grid; grid-template-columns: 60px 1fr auto; align-items: center; padding-right: 16px; border-top: 1px solid var(--line); }
+  .day:first-child { border-top: 0; }
+  .day:active { background: var(--bg2); }
+  .dn { text-align: center; line-height: 1; }
+  .dn small { display: block; font-size: 12px; color: var(--hint); margin-bottom: 3px; }
+  .dn b { font: 600 24px var(--num); }
+  .day.today::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 3px; background: var(--accent); border-radius: 0 3px 3px 0; }
+  .day.today .dn b, .day.today .dn small { color: var(--accent); }
+  .avs { display: flex; align-items: center; padding-left: 4px; }
+  .av { width: 30px; height: 30px; border-radius: 50%; margin-left: -7px; box-shadow: 0 0 0 2px var(--bg); display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 600; color: #fff; overflow: hidden; flex: none; }
+  .av:first-child { margin-left: 0; }
+  .av img { width: 100%; height: 100%; object-fit: cover; }
+  .more { margin-left: 6px; font-size: 13px; color: var(--hint); }
+  .hv { text-align: right; line-height: 1.1; }
+  .hv b { font: 600 22px var(--num); font-variant-numeric: tabular-nums; }
+  .hv small { display: block; font: 500 13px var(--num); }
+  .add { display: inline-flex; width: 36px; height: 36px; border-radius: 50%; border: 1.5px dashed color-mix(in srgb, var(--hint) 60%, transparent); align-items: center; justify-content: center; color: var(--hint); font-size: 20px; }
+  /* barra delle ore del giorno, scala 8h: piena se convalidata, chiara se in attesa, rossa se rifiutata */
+  .fill { position: absolute; left: 60px; bottom: -1px; height: 3px; width: calc((100% - 76px) * var(--w)); background: color-mix(in srgb, var(--med) 35%, transparent); }
+  .fill.convalidata { background: var(--med); } .fill.rifiutata { background: var(--no); }
+  .rifiutata-h b { text-decoration: line-through; color: var(--hint); }
+
+  /* Piede: settimana + schede */
+  .foot { border-top: 1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); background: var(--bg); }
+  .pnav { display: flex; align-items: center; height: 52px; }
+  .pnav .arr { width: 56px; height: 52px; font-size: 26px; color: var(--accent); }
+  .pnav .lbl { flex: 1; text-align: center; font-weight: 600; }
+  .pnav .lbl small { display: block; font-weight: 500; font-size: 12px; color: var(--accent); }
+  .tabs { display: flex; border-top: 1px solid var(--line); }
+  .tabs button { flex: 1; height: 48px; font-weight: 600; color: var(--hint); position: relative; }
+  .tabs button.on { color: var(--tx); }
+  .tabs button.on::before { content: ""; position: absolute; top: -1px; left: 30%; right: 30%; height: 2px; background: var(--accent); }
+
+  /* Riepilogo (solo amministratori) */
+  .rhead { background: var(--bg2); padding-top: env(safe-area-inset-top); position: sticky; top: 0; z-index: 1; }
+  .seg { display: flex; margin: 10px 16px 0; background: color-mix(in srgb, var(--hint) 18%, transparent); border-radius: 9px; padding: 2px; }
+  .seg button { flex: 1; height: 32px; border-radius: 7px; font-weight: 600; font-size: 14px; color: var(--hint); }
+  .seg button.on { background: var(--bg); color: var(--tx); }
+  .note { padding: 10px 16px 0; font-size: 14px; color: var(--hint); }
+  .pp { display: grid; grid-template-columns: 40px 1fr auto; gap: 12px; align-items: center; padding: 14px 16px 6px; border-top: 1px solid var(--line); }
+  .pp:first-child { border-top: 0; }
+  .pp .av { width: 40px; height: 40px; margin: 0; font-size: 14px; }
+  .pp .nm { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .pp .st { font: 500 13px var(--num); }
+  .pp .st span + span { margin-left: 10px; }
+  .pp .hv b { font-size: 22px; }
+  .en { display: grid; grid-template-columns: 56px 1fr auto; gap: 10px; align-items: center; padding: 6px 16px 6px 68px; min-height: 46px; }
+  .en .d { color: var(--hint); }
+  .en b { font: 600 19px var(--num); font-variant-numeric: tabular-nums; }
+  .acts2 { display: flex; gap: 8px; }
+  .acts2 button { height: 36px; padding: 0 14px; border-radius: 18px; font-weight: 600; font-size: 14px; }
+  .b-ok { background: var(--ok); color: #fff; }
+  .b-no { border: 1.5px solid var(--no); color: var(--no); }
+  .b-undo { color: var(--hint); font-size: 13px; text-decoration: underline; }
+  .en .res { font-weight: 600; font-size: 14px; margin-right: 6px; }
+  .rlist { padding-bottom: 12px; }
+
+  /* Rotelle */
+  .sheet-bg { position: fixed; inset: 0; background: rgb(0 0 0 / .45); z-index: 5; display: flex; align-items: flex-end; }
+  .sheet { background: var(--bg); width: 100%; border-radius: 16px 16px 0 0; padding: 18px 16px calc(14px + env(safe-area-inset-bottom)); }
+  .sheet h2 { margin: 0; font-size: 17px; font-weight: 600; text-align: center; }
+  .sheet p { margin: 2px 0 10px; text-align: center; color: var(--hint); font-size: 14px; }
+  .wheels { position: relative; display: flex; justify-content: center; gap: 36px; }
+  .wheels::before { content: ""; position: absolute; left: 0; right: 0; top: 80px; height: 40px; background: var(--bg2); border-radius: 8px; }
+  .col { position: relative; }
+  .col small { position: absolute; top: 90px; left: 100%; margin-left: 2px; color: var(--hint); font-size: 14px; }
+  .wheel { position: relative; width: 64px; height: 200px; overflow-y: scroll; scroll-snap-type: y mandatory; scrollbar-width: none; text-align: center;
+           -webkit-mask-image: linear-gradient(transparent, #000 35%, #000 65%, transparent); mask-image: linear-gradient(transparent, #000 35%, #000 65%, transparent); }
+  .wheel::-webkit-scrollbar { display: none; }
+  .wheel div { height: 40px; line-height: 40px; font: 600 26px/40px var(--num); scroll-snap-align: center; }
+  .wheel .pad { height: 80px; scroll-snap-align: none; }
+  .acts { display: flex; gap: 10px; margin-top: 16px; }
+  .acts button { flex: 1; height: 50px; border-radius: 12px; font-weight: 600; font-size: 16px; background: var(--bg2); }
+  .acts .save { background: var(--accent); color: var(--accent-tx); flex: 2; }
+  .acts .del { color: var(--no); }
+
+  #toast { position: fixed; left: 16px; right: 16px; bottom: calc(116px + env(safe-area-inset-bottom)); text-align: center; z-index: 9; pointer-events: none; opacity: 0; transition: opacity .2s; }
+  #toast span { display: inline-block; background: var(--tx); color: var(--bg); padding: 9px 14px; border-radius: 10px; font-size: 14px; }
+  #toast.on { opacity: 1; }
+  .msg { text-align: center; color: var(--hint); padding: 32px 16px; }
+  @media (prefers-reduced-motion: reduce) { #toast { transition: none; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top" id="top">
+    <div class="who" id="who"></div>
+    <div class="sum" id="sum"></div>
+  </header>
+
+  <main class="pane" id="week"><div id="days"><div class="msg">Caricamento…</div></div></main>
+
+  <main class="pane" id="rank" hidden>
+    <div class="rhead">
+      <div class="seg"><button data-mode="week" class="on">Settimana</button><button data-mode="month">Mese</button></div>
+      <div class="pnav"><button class="arr" id="rprev" aria-label="Prima">‹</button><b class="lbl" id="rlabel"></b><button class="arr" id="rnext" aria-label="Dopo">›</button></div>
+    </div>
+    <div id="rlist" class="rlist"></div>
+  </main>
+
+  <footer class="foot">
+    <div class="pnav" id="wnav">
+      <button class="arr" id="wprev" aria-label="Settimana prima">‹</button>
+      <button class="lbl" id="wlabel"></button>
+      <button class="arr" id="wnext" aria-label="Settimana dopo">›</button>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="week" class="on">Le ore</button>
+      <button data-tab="rank">Riepilogo</button>
+    </nav>
+  </footer>
+</div>
+
+<div class="sheet-bg" id="sheet" hidden>
+  <div class="sheet">
+    <h2 id="ptitle"></h2>
+    <p id="pwho"></p>
+    <div class="wheels">
+      <div class="col"><div class="wheel" id="wh"></div><small>ore</small></div>
+      <div class="col"><div class="wheel" id="wm"></div><small>min</small></div>
+    </div>
+    <div class="acts">
+      <button id="pdel" class="del">Cancella</button>
+      <button id="pok" class="save">Salva</button>
+    </div>
+  </div>
+</div>
+<div id="toast"><span></span></div>
+
+<script>
+// URL dell'app web Apps Script (vedi PROCEDURA.md, punto C.4)
+const API = 'https://script.google.com/macros/s/AKfycbxr8rCycXDg0ihaLZHuta57JwoNzE4uHztQcmMU1kGh_3X1rRaMhUig7ul-BigxPxZhsw/exec';
+const MED_WEEK = 120;      // obiettivo: 2 ore MED a settimana
+const DAY_SCALE = 480;     // la barra del giorno è piena a 8 ore
+
+const tg = window.Telegram && Telegram.WebApp;
+const DEMO = API.startsWith('INCOLLA');  // dati finti finché l'URL del server non è configurato
+if (tg) {
+  tg.ready(); tg.expand();
+  if (tg.disableVerticalSwipes) tg.disableVerticalSwipes();
+  if (tg.colorScheme === 'dark') document.documentElement.classList.add('dark');
+}
+
+const GG = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+const GIORNI = ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
+const MM = ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'];
+const MESI = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+const H_VALS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12];
+const M_VALS = [0, 15, 30, 45];
+const STATO = { convalidata: ['ok', '✓ convalidate'], rifiutata: ['no', '✗ rifiutate'], '': ['wait', 'in attesa'] };
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => `&#${c.charCodeAt(0)};`);
+const pad = n => String(n).padStart(2, '0');
+const iso = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+const parse = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDays = (d, n) => { const x = new Date(d); x.setDate(x.getDate() + n); return x; };
+const monday = d => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - (x.getDay() + 6) % 7); return x; };
+const fmt = m => (m % 60 ? `${Math.floor(m / 60)}h${pad(m % 60)}` : `${m / 60}h`);
+const dayName = d => { const x = parse(d); return `${GG[(x.getDay() + 6) % 7]} ${x.getDate()}`; };
+
+// entries[userId][YYYY-MM-DD] = { m: minuti, s: 'convalidata' | 'rifiutata' | '' (in attesa) }
+let me, admin = false, users = {}, entries = {}, target;   // target = di chi è il calendario (altri solo per gli amministratori)
+let weekStart = monday(new Date());
+let month = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+let rmode = 'week', editing;
+
+const get = (uid, d) => (entries[uid] || {})[d];
+function setLocal(uid, d, m, s = '') {
+  entries[uid] = entries[uid] || {};
+  if (m) entries[uid][d] = { m, s }; else delete entries[uid][d];
+}
+const inRange = (uid, from, to) => Object.keys(entries[uid] || {}).filter(d => d >= from && d < to).sort();
+function sum(uid, from, to) {
+  const t = { tot: 0, ok: 0, no: 0, wait: 0 };
+  for (const d of inRange(uid, from, to)) {
+    const e = entries[uid][d];
+    t.tot += e.m; t[e.s === 'convalidata' ? 'ok' : e.s === 'rifiutata' ? 'no' : 'wait'] += e.m;
+  }
+  return t;
+}
+const weekRange = () => [iso(weekStart), iso(addDays(weekStart, 7))];
+const monthRange = d => [iso(new Date(d.getFullYear(), d.getMonth(), 1)), iso(new Date(d.getFullYear(), d.getMonth() + 1, 1))];
+const byName = () => Object.values(users).sort((a, b) => a.name.localeCompare(b.name));
+
+function av(uid, d = '') {
+  const u = users[uid] || { name: '?' };
+  const ini = u.name.split(/\s+/).map(w => w[0] || '').join('').slice(0, 2).toUpperCase();
+  const hue = [...uid].reduce((a, c) => a + c.charCodeAt(0), 0) * 47 % 360;
+  const img = u.photo && u.photo !== '-' ? `<img src="${esc(u.photo)}" alt="">` : esc(ini);
+  return `<span class="av" data-u="${esc(uid)}" data-d="${d}" style="background:hsl(${hue} 35% 48%)">${img}</span>`;
+}
+
+function weekLabel() {
+  const a = weekStart, b = addDays(weekStart, 6), y = b.getFullYear() !== new Date().getFullYear() ? ' ' + b.getFullYear() : '';
+  return a.getMonth() === b.getMonth()
+    ? `${a.getDate()}–${b.getDate()} ${MESI[a.getMonth()].toLowerCase()}${y}`
+    : `${a.getDate()} ${MM[a.getMonth()]} – ${b.getDate()} ${MM[b.getMonth()]}${y}`;
+}
+const isThisWeek = () => iso(weekStart) === iso(monday(new Date()));
+
+function renderWeek() {
+  const today = iso(new Date());
+  $('#wlabel').innerHTML = esc(weekLabel()) + (isThisWeek() ? '' : '<small>torna a oggi</small>');
+  let html = '';
+  for (let i = 0; i < 7; i++) {
+    const day = addDays(weekStart, i), d = iso(day), e = get(target, d);
+    const who = Object.keys(entries).filter(u => entries[u][d]);
+    const avs = who.slice(0, 5).map(u => av(u, d)).join('') + (who.length > 5 ? `<span class="more">+${who.length - 5}</span>` : '');
+    const hv = e ? `<b>${fmt(e.m)}</b><small class="${STATO[e.s][0]}">${STATO[e.s][1]}</small>` : '<span class="add">+</span>';
+    html += `<div class="day${d === today ? ' today' : ''}" data-d="${d}">
+      <div class="dn"><small>${GG[i]}</small><b>${day.getDate()}</b></div>
+      <div class="avs">${avs}</div><div class="hv${e && e.s === 'rifiutata' ? ' rifiutata-h' : ''}">${hv}</div>
+      ${e ? `<div class="fill ${e.s}" style="--w:${Math.min(e.m / DAY_SCALE, 1)}"></div>` : ''}</div>`;
+  }
+  $('#days').innerHTML = html;
+  const thu = addDays(weekStart, 3), ws = sum(target, ...weekRange()), ms = sum(target, ...monthRange(thu));
+  $('#sum').innerHTML = `<div><span>Settimana</span><b>${fmt(ws.tot)}</b><small>/${fmt(MED_WEEK)}</small></div>
+    <div><span>${MESI[thu.getMonth()]}</span><b>${fmt(ms.tot)}</b></div>
+    <div><span>Convalidate</span><b class="ok">${fmt(ms.ok)}</b></div>`;
+}
+
+// Riepilogo, visibile a tutti: settimana = una riga per iscrizione; mese = totali per persona.
+// Solo gli amministratori vedono i pulsanti Convalida / Rifiuta (e il server lo verifica).
+const stLine = t => [t.ok && `<span class="ok">✓ ${fmt(t.ok)}</span>`, t.no && `<span class="no">✗ ${fmt(t.no)}</span>`,
+  t.wait && `<span class="wait">${fmt(t.wait)} in attesa</span>`].filter(Boolean).join('') || '<span class="wait">nessuna ora</span>';
+
+function renderRank() {
+  document.querySelectorAll('.seg button').forEach(b => b.classList.toggle('on', b.dataset.mode === rmode));
+  let html = '';
+  if (rmode === 'week') {
+    $('#rlabel').innerHTML = esc(weekLabel()) + (isThisWeek() ? '' : '<small>questa settimana</small>');
+    const [from, to] = weekRange(), people = byName().filter(u => inRange(u.id, from, to).length);
+    const waiting = people.reduce((n, u) => n + inRange(u.id, from, to).filter(d => !entries[u.id][d].s).length, 0);
+    html += `<div class="note">${!people.length ? 'Nessuno ha segnato ore in questa settimana.'
+      : waiting ? `${waiting} ${waiting === 1 ? 'iscrizione' : 'iscrizioni'} ${admin ? 'da valutare' : 'in attesa di convalida'}` : 'Tutte le iscrizioni sono valutate.'}</div>`;
+    for (const u of people) {
+      const t = sum(u.id, from, to);
+      html += `<div class="pp">${av(u.id)}<div><div class="nm">${esc(u.name)}</div><div class="st">${stLine(t)}</div></div><div class="hv"><b>${fmt(t.tot)}</b></div></div>`;
+      for (const d of inRange(u.id, from, to)) {
+        const e = entries[u.id][d], k = `data-u="${esc(u.id)}" data-d="${d}"`;
+        const label = { convalidata: '✓ convalidata', rifiutata: '✗ rifiutata', '': 'in attesa' }[e.s];
+        const right = admin && !e.s
+          ? `<span class="acts2"><button class="b-no" data-st="rifiutata" ${k}>Rifiuta</button><button class="b-ok" data-st="convalidata" ${k}>Convalida</button></span>`
+          : `<span><span class="res ${STATO[e.s][0]}">${label}</span>${admin ? `<button class="b-undo" data-st="" ${k}>cambia</button>` : ''}</span>`;
+        html += `<div class="en"><span class="d">${dayName(d)}</span><b>${fmt(e.m)}</b>${right}</div>`;
+      }
+    }
+    const none = byName().filter(u => !inRange(u.id, from, to).length).map(u => esc(u.name));
+    if (admin && none.length && people.length) html += `<div class="note">Senza ore: ${none.join(', ')}</div>`;
+  } else {
+    $('#rlabel').textContent = `${MESI[month.getMonth()]} ${month.getFullYear()}`;
+    const [from, to] = monthRange(month);
+    html = byName().map(u => {
+      const t = sum(u.id, from, to);
+      return `<div class="pp">${av(u.id)}<div><div class="nm">${esc(u.name)}</div><div class="st">${stLine(t)}</div></div><div class="hv"><b class="ok">${fmt(t.ok)}</b><small class="wait">su ${fmt(t.tot)}</small></div></div>`;
+    }).join('') || '<div class="msg">Ancora nessuno ha aperto l\'app.</div>';
+  }
+  $('#rlist').innerHTML = html;
+}
+
+function render() { renderWeek(); renderRank(); }
+
+function apply(r) {
+  me = r.me; admin = !!r.admin; users = {}; entries = {};
+  r.users.forEach(u => users[u.id] = u);
+  r.entries.forEach(([u, d, m, s]) => setLocal(u, d, m, s));
+  if (!admin || !users[target]) target = me;
+  if (admin) {
+    $('#who').innerHTML = `<select aria-label="Persona">${byName().map(u => `<option value="${esc(u.id)}">${esc(u.name)}${u.id === me ? ' (tu)' : ''}</option>`).join('')}</select>`;
+    $('#who select').value = target;
+  } else $('#who').textContent = users[me] ? users[me].name : '';
+  render();
+}
+
+async function api(action, data = {}) {
+  if (DEMO) return demoApi(action, data);
+  const r = await fetch(API, { method: 'POST', body: JSON.stringify({ initData: tg.initData, action, ...data }) });
+  const j = await r.json();
+  if (j.error) throw new Error(j.error);
+  return j;
+}
+
+// Modifica locale subito, poi conferma dal server; se fallisce torna com'era
+async function send(action, data, local) {
+  const before = JSON.stringify(entries);
+  local(); render();
+  try {
+    apply(await api(action, data));
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+  } catch (e) {
+    entries = JSON.parse(before); render(); toast('Non salvato: ' + e.message);
+  }
+}
+const save = (d, m) => { const uid = target; send('save', { userId: uid, date: d, minutes: m }, () => setLocal(uid, d, m)); };
+const review = (uid, d, state) => send('review', { userId: uid, date: d, state }, () => { get(uid, d).s = state; });
+
+let toastT;
+function toast(t) {
+  const el = $('#toast'); el.firstChild.textContent = t; el.classList.add('on');
+  clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('on'), 2200);
+}
+
+// Rotelle: lista con scroll-snap, ogni voce alta 40px
+function setWheel(el, vals, v) {
+  el.innerHTML = '<div class="pad"></div>' + vals.map(x => `<div>${x}</div>`).join('') + '<div class="pad"></div>';
+  el.scrollTop = Math.max(0, vals.indexOf(v)) * 40;
+}
+const wheelVal = (el, vals) => vals[Math.min(vals.length - 1, Math.max(0, Math.round(el.scrollTop / 40)))];
+
+function openPicker(d) {
+  editing = d;
+  const e = get(target, d), m = e ? e.m : 0, day = parse(d);
+  $('#ptitle').textContent = `${GIORNI[(day.getDay() + 6) % 7]} ${day.getDate()} ${MESI[day.getMonth()].toLowerCase()}`;
+  $('#pwho').textContent = (target === me ? 'Le tue ore MED' : 'Ore MED di ' + users[target].name)
+    + (e && e.s ? `. Già ${e.s}: se le modifichi tornano in attesa.` : '');
+  $('#pdel').hidden = !m;
+  $('#sheet').hidden = false;
+  setWheel($('#wh'), H_VALS, m ? Math.floor(m / 60) : 2);
+  setWheel($('#wm'), M_VALS, m % 60);
+}
+const closePicker = () => $('#sheet').hidden = true;
+
+function showTab(tab) {
+  const week = tab === 'week';
+  document.querySelectorAll('.tabs button').forEach(x => x.classList.toggle('on', x.dataset.tab === tab));
+  $('#week').hidden = $('#top').hidden = $('#wnav').hidden = !week;
+  $('#rank').hidden = week;
+  if (!week) renderRank();
+}
+
+// Eventi
+document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => showTab(b.dataset.tab));
+document.querySelectorAll('.seg button').forEach(b => b.onclick = () => { rmode = b.dataset.mode; renderRank(); });
+const shiftWeek = n => { weekStart = addDays(weekStart, n); render(); };
+const shiftMonth = n => { month = new Date(month.getFullYear(), month.getMonth() + n, 1); renderRank(); };
+$('#wprev').onclick = () => shiftWeek(-7);
+$('#wnext').onclick = () => shiftWeek(7);
+$('#wlabel').onclick = () => { weekStart = monday(new Date()); render(); };
+$('#rprev').onclick = () => rmode === 'week' ? shiftWeek(-7) : shiftMonth(-1);
+$('#rnext').onclick = () => rmode === 'week' ? shiftWeek(7) : shiftMonth(1);
+$('#rlabel').onclick = () => { if (rmode === 'week') { weekStart = monday(new Date()); render(); } };
+// Swipe orizzontale sui giorni: sinistra = settimana dopo, destra = settimana prima
+let sx, sy;
+$('#days').addEventListener('touchstart', e => { sx = e.touches[0].clientX; sy = e.touches[0].clientY; }, { passive: true });
+$('#days').addEventListener('touchend', e => {
+  const dx = e.changedTouches[0].clientX - sx, dy = e.changedTouches[0].clientY - sy;
+  if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) shiftWeek(dx < 0 ? 7 : -7);
+});
+$('#who').addEventListener('change', e => { target = e.target.value; renderWeek(); });
+document.body.addEventListener('click', e => {
+  const st = e.target.closest('[data-st]'), a = e.target.closest('.av'), day = e.target.closest('.day');
+  if (st) review(st.dataset.u, st.dataset.d, st.dataset.st);
+  else if (a && a.dataset.d) toast(users[a.dataset.u].name + ': ' + fmt(get(a.dataset.u, a.dataset.d).m));
+  else if (day) openPicker(day.dataset.d);
+});
+$('#sheet').onclick = e => { if (e.target.id === 'sheet') closePicker(); };
+$('#pok').onclick = () => {
+  const m = wheelVal($('#wh'), H_VALS) * 60 + wheelVal($('#wm'), M_VALS); // leggere prima di nascondere: nascoste valgono 0
+  closePicker(); save(editing, m);
+};
+$('#pdel').onclick = () => { closePicker(); save(editing, 0); };
+
+// Senza questo permesso il bot non può mandare il promemoria in privato.
+// Chiesto una volta sola per bot: CloudStorage di Telegram è separato per ogni bot.
+function askWriteAccess() {
+  const u = tg && tg.initDataUnsafe && tg.initDataUnsafe.user;
+  if (!u || u.allows_write_to_pm || !tg.isVersionAtLeast('6.9')) return;
+  tg.CloudStorage.getItem('chiestoPermesso', (err, v) => {
+    if (err || v) return;
+    tg.CloudStorage.setItem('chiestoPermesso', '1');
+    tg.requestWriteAccess();
+  });
+}
+
+// Demo fuori da Telegram: dati finti in memoria, niente server
+let demo;
+function demoApi(action, data) {
+  if (!demo) {
+    const names = ['Gabriele Rossi', 'Anna Bianchi', 'Luca Verdi', 'Sara Neri', 'Marco Gallo', 'Elena Fontana'];
+    demo = { me: '1', admin: true, users: names.map((n, i) => ({ id: String(i + 1), name: n, photo: '' })), entries: [] };
+    for (let i = 0; i < 60; i++) names.forEach((_, u) => {
+      const s = i < 7 ? '' : ['convalidata', 'convalidata', 'convalidata', 'rifiutata'][Math.floor(Math.random() * 4)];
+      if (Math.random() < 0.2) demo.entries.push([String(u + 1), iso(addDays(new Date(), -i)), (2 + Math.floor(Math.random() * 7)) * 15, s]);
+    });
+  }
+  if (action === 'save') {
+    demo.entries = demo.entries.filter(([u, d]) => !(u === data.userId && d === data.date));
+    if (data.minutes) demo.entries.push([data.userId, data.date, data.minutes, '']);
+  }
+  if (action === 'review') demo.entries.forEach(e => { if (e[0] === data.userId && e[1] === data.date) e[3] = data.state; });
+  return JSON.parse(JSON.stringify(demo));
+}
+
+api('load').then(r => { apply(r); if (!DEMO) askWriteAccess(); })
+  .catch(e => { $('#days').innerHTML = `<div class="msg">${esc(e.message)}</div>`; });
+</script>
+</body>
+</html>
